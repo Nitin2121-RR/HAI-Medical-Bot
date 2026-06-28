@@ -1,0 +1,209 @@
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Segoe UI',sans-serif;
+}
+
+body{
+    height:100vh;
+    background:#f1f5f9;
+}
+
+.container{
+    display:flex;
+    height:100vh;
+}
+
+.sidebar{
+
+    width:280px;
+
+    background:#0f172a;
+
+    color:white;
+
+    padding:20px;
+
+    display:flex;
+
+    flex-direction:column;
+
+    justify-content:space-between;
+}
+
+.sidebar h2{
+
+    margin-bottom:10px;
+}
+
+.user-name{
+
+    color:#93c5fd;
+
+    margin-bottom:20px;
+}
+
+.upload-section{
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:10px;
+}
+
+.upload-section h3{
+
+    margin-bottom:10px;
+}
+
+.upload-section input{
+
+    background:white;
+
+    color:black;
+
+    padding:10px;
+
+    border-radius:8px;
+}
+
+.upload-section button{
+
+    border:none;
+
+    background:#2563eb;
+
+    color:white;
+
+    padding:12px;
+
+    border-radius:10px;
+
+    cursor:pointer;
+}
+
+.chat-section{
+
+    flex:1;
+
+    display:flex;
+
+    flex-direction:column;
+}
+
+.chat-box{
+
+    flex:1;
+
+    overflow-y:auto;
+
+    padding:25px;
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:15px;
+}
+
+.user-message{
+
+    align-self:flex-end;
+
+    background:#2563eb;
+
+    color:white;
+
+    padding:12px 16px;
+
+    border-radius:14px;
+
+    max-width:70%;
+}
+
+.bot-message{
+
+    align-self:flex-start;
+
+    background:white;
+
+    color:#0f172a;
+
+    padding:12px 16px;
+
+    border-radius:14px;
+
+    max-width:70%;
+
+    box-shadow:
+    0 2px 8px rgba(0,0,0,0.08);
+}
+
+.input-area{
+
+    display:flex;
+
+    padding:20px;
+
+    background:white;
+
+    border-top:
+    1px solid #e2e8f0;
+
+    gap:10px;
+}
+
+.input-area input{
+
+    flex:1;
+
+    padding:14px;
+
+    border:
+    1px solid #cbd5e1;
+
+    border-radius:10px;
+
+    outline:none;
+}
+
+.input-area button{
+
+    border:none;
+
+    background:#2563eb;
+
+    color:white;
+
+    padding:14px 24px;
+
+    border-radius:10px;
+
+    cursor:pointer;
+}
+
+.bot-message pre{
+    background:#1e1e1e;
+    padding:12px;
+    border-radius:10px;
+    overflow-x:auto;
+}
+
+.bot-message table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+.bot-message td,
+.bot-message th{
+    border:1px solid #ddd;
+    padding:8px;
+}
+
+.bot-message h1,
+.bot-message h2,
+.bot-message h3{
+    margin-top:10px;
+}

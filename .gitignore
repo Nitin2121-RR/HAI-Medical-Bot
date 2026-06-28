@@ -1,0 +1,8 @@
+myenv/
+__pycache__/
+.env
+uploads/
+temp_images/
+chunks/
+vectorstore/
+*.pyc

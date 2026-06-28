@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+
+    <div class="container">
+
+        <div class="card">
+            <h1>Welcome</h1>
+
+            <h2 id="username">Loading...</h2>
+
+            <p>
+                You have successfully logged in.
+            </p>
+
+            <button id="continueBtn">
+                Continue
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+
+        const token = localStorage.getItem("access_token");
+
+        async function getUser() {
+
+            try {
+
+                const response = await fetch("/current_user", {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json();
+
+                document.getElementById("username").innerText = data.name;
+
+            } catch (error) {
+                console.log(error);
+            }
+            
+        }
+
+        getUser();
+
+        document
+            .getElementById("continueBtn")
+            .addEventListener("click", () => {
+
+                window.location.href = "/current_user/chat";
+
+            });
+
+    </script>
+
+</body>
+</html>

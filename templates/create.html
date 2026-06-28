@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HIA - Create Account</title>
+
+    <link rel="stylesheet" href="/static/css/home.css">
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+
+    <div class="container">
+
+        <!-- Left Section -->
+        <div class="left-section">
+
+            <div class="logo">
+                <i class="fa-solid fa-heart-pulse"></i>
+            </div>
+
+            <h1>HIA</h1>
+            <h2>Health Insights Agent</h2>
+
+            <p>
+                Create your account and access AI-powered
+                healthcare analytics, patient monitoring,
+                medical report analysis, and intelligent
+                health insights.
+            </p>
+
+            <div class="features">
+
+                <div class="feature">
+                    <i class="fa-solid fa-shield-heart"></i>
+                    <span>Secure Medical Analysis</span>
+                </div>
+
+                <div class="feature">
+                    <i class="fa-solid fa-brain"></i>
+                    <span>AI Health Prediction</span>
+                </div>
+
+                <div class="feature">
+                    <i class="fa-solid fa-user-doctor"></i>
+                    <span>Patient Monitoring</span>
+                </div>
+
+                <div class="feature">
+                    <i class="fa-solid fa-lock"></i>
+                    <span>HIPAA Compliant Security</span>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Right Section -->
+        <div class="right-section">
+
+            <form class="login-card" id="registerForm">
+
+                <h2>Create Account</h2>
+
+                <p class="subtitle">
+                    Register to continue
+                </p>
+
+                <div class="input-group">
+                    <label>Full Name</label>
+                    <input
+                        type="text"
+                        id="name"
+                        placeholder="Dr. John Smith"
+                        required>
+                </div>
+
+                <div class="input-group">
+                    <label>Email Address</label>
+                    <input
+                        type="email"
+                        id="email"
+                        placeholder="doctor@hospital.com"
+                        required>
+                </div>
+
+                <div class="input-group">
+                    <label>Password</label>
+                    <input
+                        type="password"
+                        id="password"
+                        placeholder="Create Password"
+                        required>
+                </div>
+
+                <div class="input-group">
+                    <label>Confirm Password</label>
+                    <input
+                        type="password"
+                        id="confirmPassword"
+                        placeholder="Confirm Password"
+                        required>
+                </div>
+
+                <button type="submit" class="login-btn">
+                    Create Account
+                </button>
+
+                <p id="message"></p>
+
+                <p class="register">
+                    Already have an account?
+                    <a href="/user/login">Login</a>
+                </p>
+
+            </form>
+
+        </div>
+
+    </div>
+
+    <script>
+
+        document.getElementById("registerForm")
+        .addEventListener("submit", async function(e){
+
+            e.preventDefault();
+
+            const password =
+                document.getElementById("password").value;
+
+            const confirmPassword =
+                document.getElementById("confirmPassword").value;
+
+            if(password !== confirmPassword){
+
+                document.getElementById("message").innerText =
+                    "Passwords do not match";
+
+                return;
+            }
+
+            const data = {
+
+                name:
+                    document.getElementById("name").value,
+
+                email:
+                    document.getElementById("email").value,
+
+                password:
+                    document.getElementById("password").value
+            };
+
+            console.log(data);
+
+            const response = await fetch("/user/create",{
+                method:"POST",
+                headers:{
+                    "Content-Type":"application/json"
+                },
+                body:JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            document.getElementById("message").innerText =
+                result.message;
+            if(response.ok){
+                window.location.href = "/user/login";
+            }
+        });
+
+    </script>
+
+</body>
+</html>

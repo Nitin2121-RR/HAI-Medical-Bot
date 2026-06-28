@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HIA - Health Insights Agent</title>
+
+<link rel="stylesheet" href="/static/css/chat.css">
+
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- Sidebar -->
+
+    <div class="sidebar">
+
+        <div>
+            <h2>🩺 HIA</h2>
+
+            <p class="user-name" id="username">
+                Loading...
+            </p>
+        </div>
+
+        <div class="upload-section">
+
+            <h3>Medical Report</h3>
+
+            <input
+                type="file"
+                id="pdfFile"
+                accept=".pdf">
+
+            <button id="uploadBtn">
+                Upload PDF
+            </button>
+
+        </div>
+
+    </div>
+
+    <!-- Chat -->
+
+    <div class="chat-section">
+
+        <div id="chat-box" class="chat-box">
+
+            <div class="bot-message">
+                Welcome to Health Insights Agent 👋
+                Upload your report and ask questions.
+            </div>
+
+        </div>
+
+        <div class="input-area">
+
+            <input
+                type="text"
+                id="messageInput"
+                placeholder="Ask about your report...">
+
+            <button id="sendBtn">
+                Send
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+let uuid = localStorage.getItem("current_uuid");
+
+const token =
+localStorage.getItem("access_token");
+
+const chatBox =
+document.getElementById("chat-box");
+
+function addUserMessage(text){
+
+    const div = document.createElement("div");
+
+    div.className = "user-message";
+
+    div.textContent = text;
+
+    chatBox.appendChild(div);
+
+    chatBox.scrollTop =
+    chatBox.scrollHeight;
+}
+
+function addBotMessage(text){
+
+    const div = document.createElement("div");
+
+    div.className = "bot-message";
+
+    div.innerHTML = marked.parse(text);
+
+    chatBox.appendChild(div);
+
+    hljs.highlightAll();
+
+    chatBox.scrollTop =
+    chatBox.scrollHeight;
+}
+
+// Check Login
+
+if(!token){
+
+    window.location.href = "/user/login";
+}
+
+
+
+// Load Current User
+
+async function getCurrentUser(){
+
+    try{
+
+        const response =
+        await fetch("/current_user/",{
+            headers:{
+                Authorization:
+                `Bearer ${token}`
+            }
+
+        });
+
+        if(!response.ok){
+
+            localStorage.removeItem(
+                "access_token"
+            );
+
+            window.location.href = "/";
+            return;
+        }
+
+        const data =
+        await response.json();
+
+        document
+        .getElementById("username")
+        .innerText = data.name;
+
+    }
+
+    catch(error){
+
+        console.log(error);
+
+    }
+
+}
+
+
+
+// Load Previous Chats
+
+
+async function loadMessages(){
+
+    try{
+
+        const response =
+        await fetch("/current_user/messages",{
+
+            headers:{
+                Authorization:
+                `Bearer ${token}`
+            }
+
+        });
+
+        const messages =
+        await response.json();
+
+        messages.forEach(msg => {
+
+            if(msg.role === "user"){
+
+                addUserMessage(msg.content);
+            }
+            else{
+
+                addBotMessage(msg.content);
+            }
+
+        });
+
+        chatBox.scrollTop =
+        chatBox.scrollHeight;
+
+    }
+
+    catch(error){
+
+        console.log(error);
+
+    }
+
+}
+
+
+
+// Upload PDF
+
+document
+.getElementById("uploadBtn")
+.addEventListener("click",
+async () => {
+
+    const file =
+    document
+    .getElementById("pdfFile")
+    .files[0];
+
+    if(!file){
+
+        alert("Choose a PDF first");
+        return;
+    }
+
+    const formData =
+    new FormData();
+
+    formData.append(
+        "file",
+        file
+    );
+
+    try{
+
+        const response =
+        await fetch(
+            "/current_user/upload-pdf",
+            {
+                method:"POST",
+                headers:{
+                    Authorization:
+                    `Bearer ${token}`
+                },
+
+                body:formData
+            }
+        );
+
+        const data =
+        await response.json();
+        uuid = data.uuid;    
+        localStorage.setItem("current_uuid", uuid);
+        addUserMessage(`📄 ${file.name}`);
+
+        addBotMessage(data.message);
+
+        chatBox.scrollTop =
+        chatBox.scrollHeight;
+
+    }
+
+    catch(error){
+
+        console.log(error);
+
+    }
+
+});
+
+
+
+// Send Chat
+
+document
+.getElementById("sendBtn")
+.addEventListener("click",
+async () => {
+
+    const input =
+    document.getElementById(
+        "messageInput"
+    );
+
+    const message =
+    input.value;
+
+    if(message.trim()===""){
+        return;
+    }
+
+    addUserMessage(message);
+
+    input.value = "";
+
+    chatBox.scrollTop =
+    chatBox.scrollHeight;
+
+    try{
+
+        const response =
+        await fetch(
+            "/current_user/chat",
+            {
+                method:"POST",
+
+                headers:{
+                    "Content-Type":
+                    "application/json",
+
+                    Authorization:
+                    `Bearer ${token}`
+                },
+
+                body:JSON.stringify({
+                    question:message,
+                    uuid_name:uuid
+                })
+            }
+        );
+
+        const data =
+        await response.json();
+
+        addBotMessage(data.answer);
+
+        chatBox.scrollTop =
+        chatBox.scrollHeight;
+
+    }
+
+    catch(error){
+
+        console.log(error);
+
+    }
+
+});
+
+
+getCurrentUser();
+loadMessages();
+
+</script>
+
+</body>
+</html>
