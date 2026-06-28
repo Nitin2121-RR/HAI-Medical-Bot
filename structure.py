@@ -16,7 +16,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel , Field
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
-from sentence_transformers import CrossEncoder 
+from flashrank import Ranker, RerankRequest
 from langgraph.checkpoint.postgres import PostgresSaver
 
 load_dotenv('.env')
@@ -24,6 +24,8 @@ llm_1 = ChatGroq(model="llama-3.1-8b-instant" , groq_api_key=os.getenv('GROQ_API
 llm_2 = ChatGroq(model="llama-3.1-8b-instant" , groq_api_key=os.getenv('GROQ_API_KEY_2'))
 llm_3 = ChatGenAI(model="gemini-2.5-flash", google_api_key=os.getenv('GEMINI_API_KEY_1'))
 
+
+ranker = Ranker()
 
 _checkpointer_ctx = PostgresSaver.from_conn_string(os.getenv("DATABASE_URL"))
 checkpointer = _checkpointer_ctx.__enter__()
@@ -69,10 +71,6 @@ def retrived(state:State):
 
     total_chunks = docs + chuks
 
-    ranker = CrossEncoder(
-        "cross-encoder/ms-marco-MiniLM-L-6-v2" 
-    )
-
     unique_docs = []
     seen = set()
 
@@ -82,14 +80,27 @@ def retrived(state:State):
             unique_docs.append(doc)
 
 
-    pair = [(query.ans , doc.page_content) for doc in unique_docs]
+    passages = [
+    {
+        "id": i,
+        "text": doc.page_content
+    }
+        for i, doc in enumerate(unique_docs)
+    ]
 
-    scores = ranker.predict(pair) 
+    request = RerankRequest(
+        query=query.ans,
+        passages=passages
+    )
 
-    docs = sorted(zip(scores , unique_docs) , key=lambda x: x[0] , reverse=True)
+    results = ranker.rerank(request)
 
-    for score , doc in docs:
-        chunks.append(doc.page_content) 
+    chunks = []
+
+    for item in results:
+        chunks.append(
+            unique_docs[item["id"]].page_content
+        )
     return {
         "chunks":chunks 
     }
