@@ -17,9 +17,6 @@ from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from dotenv import load_dotenv
 import os 
 from langchain_core.documents import Document
-import shutil
-import fitz
-from rapidocr_onnxruntime import RapidOCR
 load_dotenv('.env')
 router = APIRouter(prefix="/current_user" , tags=["Current User"])
 
@@ -109,58 +106,14 @@ async def upload_pdf(
     with open(pdf_path, "wb") as f:
         f.write(await file.read())
 
-    # ------------------------
-    # OCR Engine
-    # ------------------------
+    loader = PyMuPDFLoader(pdf_path)
+    pages = loader.load()
 
-    engine = RapidOCR()
+    total_pages = len(pages)
 
-    pdf = fitz.open(pdf_path)
-    total_pages = len(pdf)
-    full_text = ""
+    full_text = "\n".join(page.page_content for page in pages)
 
-    # ------------------------
-    # OCR Every Page
-    # ------------------------
-
-    for page_no in range(len(pdf)):
-
-        page = pdf.load_page(page_no)
-
-        pix = page.get_pixmap()
-
-        img_path = f"temp_images/{current_user.id}_{page_no}.png"
-
-        pix.save(img_path)
-
-        result, _ = engine(img_path)
-
-        if result:
-
-            for line in result:
-
-                full_text += line[1] + "\n"
-
-        full_text += "\n\n"
-        # Free memory
-        del result
-        del pix
-        del page
-    pdf.close()
-    del pdf
-    # ------------------------
-    # Delete Temp Images
-    # ------------------------
-
-    shutil.rmtree("temp_images")
-    os.makedirs("temp_images")
-
-    # ------------------------
-    # Validate OCR
-    # ------------------------
-
-    if len(full_text.strip()) == 0:
-
+    if not full_text.strip():
         raise HTTPException(
             status_code=400,
             detail="Unable to extract text from PDF."
@@ -189,8 +142,8 @@ async def upload_pdf(
     # ------------------------
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100
+        chunk_size=1000,
+        chunk_overlap=200
     )
 
     chunks = splitter.split_documents(docs) 
