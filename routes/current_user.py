@@ -127,7 +127,7 @@ async def upload_pdf(
 
         page = pdf.load_page(page_no)
 
-        pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
+        pix = page.get_pixmap()
 
         img_path = f"temp_images/{current_user.id}_{page_no}.png"
 
@@ -142,9 +142,12 @@ async def upload_pdf(
                 full_text += line[1] + "\n"
 
         full_text += "\n\n"
-
+        # Free memory
+        del result
+        del pix
+        del page
     pdf.close()
-
+    del pdf
     # ------------------------
     # Delete Temp Images
     # ------------------------
@@ -186,8 +189,8 @@ async def upload_pdf(
     # ------------------------
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
+        chunk_size=500,
+        chunk_overlap=100
     )
 
     chunks = splitter.split_documents(docs) 
