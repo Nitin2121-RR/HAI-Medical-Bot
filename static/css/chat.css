@@ -39,9 +39,49 @@ body {
   margin-bottom: 6px;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.brand h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: 1px;
+}
+
+.pulse-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
 .user-name {
   color: #93c5fd;
   font-size: 14px;
+}
+
+.logout-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: 1.5px solid #334155;
+  color: #f87171;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: background .2s, color .2s;
+}
+
+.logout-btn:hover {
+  background: #3b1a1a;
+  color: #fca5a5;
 }
 
 /* New session button */
