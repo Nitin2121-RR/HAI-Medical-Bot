@@ -22,6 +22,7 @@ from schema import classify , query_rewrites , responcess , is_query_ok
 from prompts import CLASSIFY_PROMPT , QUERY_REWRITE_PROMPT , GENERATION_PROMPT , SUMMARIZE_PROMPT , INPUT_SAFETY_CLASSIFIER_PROMPT
 from report_receiver import analyze_visual , extract_images_from_page
 import fitz
+from psycopg_pool import ConnectionPool
 
 load_dotenv('.env')
 
@@ -30,14 +31,19 @@ llm_3 = ChatGenAI(model="gemini-3.5-flash-lite", google_api_key=os.getenv('GEMIN
 llm_1 = ChatGenAI(model="gemini-3.5-flash-lite", google_api_key=os.getenv('GEMINI_API_KEY_1'))
 _db_url = os.getenv("DATABASE_URL")
 
-# PostgresSaver for short-term per-session checkpoint (thread memory)
-_checkpointer_ctx = PostgresSaver.from_conn_string(_db_url)
-checkpointer = _checkpointer_ctx.__enter__()
+pool = ConnectionPool(
+    conninfo=_db_url,
+    min_size=1,
+    max_size=5,
+    kwargs={"autocommit": True}
+)
+
+# Short-term memory
+checkpointer = PostgresSaver(pool)
 checkpointer.setup()
 
-# PostgresStore for long-term cross-session memory (user-level facts)
-_store_ctx = PostgresStore.from_conn_string(_db_url)
-store = _store_ctx.__enter__()
+# Long-term memory
+store = PostgresStore(pool)
 store.setup()
 
 ranker = Ranker()
