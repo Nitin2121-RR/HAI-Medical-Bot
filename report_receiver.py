@@ -2,7 +2,7 @@ import fitz
 import numpy as np
 import os
 import base64
-from rapidocr_onnxruntime import RapidOCR
+from rapidocr import RapidOCR
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import ChatGoogleGenerativeAI
