@@ -7,3 +7,5 @@ def text_splitter():
         chunk_size=600,
         chunk_overlap=120
     )
+
+

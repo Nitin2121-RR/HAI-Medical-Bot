@@ -7,9 +7,8 @@ from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI as ChatGenAI
 import os
 import json
-from langchain_community.vectorstores import Chroma
-from routes import current_user
-from langchain_core.messages import SystemMessage , HumanMessage
+from langchain_chroma import Chroma
+from langchain_core.messages import SystemMessage , HumanMessage , AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -18,150 +17,184 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 from flashrank import Ranker, RerankRequest
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.store.postgres import PostgresStore
+from schema import classify , query_rewrites , responcess , is_query_ok
+from prompts import CLASSIFY_PROMPT , QUERY_REWRITE_PROMPT , GENERATION_PROMPT , SUMMARIZE_PROMPT , INPUT_SAFETY_CLASSIFIER_PROMPT
+from report_receiver import analyze_visual , extract_images_from_page
+import fitz
 
 load_dotenv('.env')
-llm_1 = ChatGroq(model="llama-3.1-8b-instant" , groq_api_key=os.getenv('GROQ_API_KEY_1')) 
-llm_2 = ChatGroq(model="llama-3.1-8b-instant" , groq_api_key=os.getenv('GROQ_API_KEY_2'))
-llm_3 = ChatGenAI(model="gemini-2.5-flash", google_api_key=os.getenv('GEMINI_API_KEY_1'))
 
+llm_2 = ChatGenAI(model="gemini-3.5-flash-lite", google_api_key=os.getenv('GEMINI_API_KEY_2'))
+llm_3 = ChatGenAI(model="gemini-3.5-flash-lite", google_api_key=os.getenv('GEMINI_API_KEY_3'))
+llm_1 = ChatGenAI(model="gemini-3.5-flash-lite", google_api_key=os.getenv('GEMINI_API_KEY_1'))
+_db_url = os.getenv("DATABASE_URL")
+
+# PostgresSaver for short-term per-session checkpoint (thread memory)
+_checkpointer_ctx = PostgresSaver.from_conn_string(_db_url)
+checkpointer = _checkpointer_ctx.__enter__()
+checkpointer.setup()
+
+# PostgresStore for long-term cross-session memory (user-level facts)
+_store_ctx = PostgresStore.from_conn_string(_db_url)
+store = _store_ctx.__enter__()
+store.setup()
 
 ranker = Ranker()
-
-_checkpointer_ctx = PostgresSaver.from_conn_string(os.getenv("DATABASE_URL"))
-checkpointer = _checkpointer_ctx.__enter__()
-
-checkpointer.setup()
 
 emb = HuggingFaceEndpointEmbeddings(
     model="sentence-transformers/all-MiniLM-L6-v2",
     huggingfacehub_api_token=os.getenv("HUGGINGFACE")
 )
-class responce(BaseModel):
-    ans:str
-def retrived(state:State):
+def is_query_okk(state:State):
+    llm_struct = llm_2.with_structured_output(is_query_ok)
+    responce = llm_struct.invoke(INPUT_SAFETY_CLASSIFIER_PROMPT.format(
+        chat_history=state["messages"],
+        query=state["current_query"]
+    ))
+
+    return{
+        "safe": responce.is_ok,
+        "messages": [SystemMessage(content=responce.reason)]
+    }
+
+def classify_query(state:State):
+    llm_struct = llm_1.with_structured_output(classify)
+    result = llm_struct.invoke(CLASSIFY_PROMPT.format(
+        chat_history=state["messages"],
+        query=state["current_query"]
+    ))
+    return {"query_type": result.type}
+
+def emergency_flag(state:State):
+    return {
+        "messages": [SystemMessage(content="Sorry, but I can't provide information for these aspects. You are suggested to have a proper check-up with a doctor because it seems to be an emergency.")]
+    }
+
+def out_of_scope(state:State):
+    return {
+        "messages": [SystemMessage(content="I can help you understand what's written in your report, but I can't "
+        "recommend treatments, medications, or diagnoses — that needs to come "
+        "from your doctor. Would you like me to explain a specific part of your "
+        "report instead?")]
+    }
+
+def query_rewrite(state:State):
+    llm_struct = llm_1.with_structured_output(query_rewrites)
+    result = llm_struct.invoke(QUERY_REWRITE_PROMPT.format(
+        query=state["current_query"],
+        chat_history=state["messages"]
+    ))
+    return {"rewritten_query": result.query}
+
+def visual_chunks(state:State):
+    pdf_path = f"uploads/{state['user_id']}_{state['session_uuid']}.pdf"
+    chunks = state["retrived_chunks"]
+    visual_docs = [doc for doc in chunks if doc.metadata.get("has_visual")]
+    vis_doc = []
+
+    if visual_docs:
+        pdf = fitz.open(pdf_path)
+        for doc in visual_docs:
+            images = extract_images_from_page(pdf, doc.metadata["page"])
+            for image_bytes in images:
+                visual_info = analyze_visual(image_bytes)
+                vis_doc.append(Document(
+                    page_content=visual_info,
+                    metadata={"page": doc.metadata["page"], "source": doc.metadata["source"]}
+                ))
+    return {"visual_chunk": vis_doc}
+
+def reranking_chunks(state:State):
+    persist_dir = f"vectorstore/{state['user_id']}_{state['session_uuid']}"
     vectorstore = Chroma(
-        persist_directory=f'vectorstore/{state["user_id"]}_{state["uuid"]}' ,
-        embedding_function = emb
+        collection_name="chunk_collection",
+        persist_directory=persist_dir,
+        embedding_function=emb
     )
-    chunk_path = f"chunks/{state['user_id']}_{state['uuid']}.json"
-    with open(chunk_path , 'r' , encoding="utf-8") as f:
-        data = json.load(f)
+    retriver = vectorstore.as_retriever(search_kwargs={"k": 5})
+    chunks = retriver.invoke(state["rewritten_query"])
+    passages = [{"id": str(i), "metadata": doc.metadata, "text": doc.page_content} for i, doc in enumerate(chunks)]
+    request = RerankRequest(query=state["rewritten_query"], passages=passages)
+    reranked = ranker.rerank(request)
+    final_chunks = [Document(page_content=doc["text"], metadata=doc["metadata"]) for doc in reranked[:2]]
+    return {"retrived_chunks": final_chunks}
 
-    cunk = [
-        Document(
-            page_content=doc["page_content"],
-        )
-        for doc in data
-    ]
+class summ(BaseModel):
+    summary: str
 
-    bm25 = BM25Retriever.from_documents(cunk)
-    bm25.k = 3
-    
-    llm_1_structured = llm_1.with_structured_output(responce)
-    query = llm_1_structured.invoke(f'Create a new query from the users query:{state['messages'][-1].content} Make it more relevent towards getting retrived documents of Medical field')
-    retirver = vectorstore.as_retriever(search_kwargs={"k": 3})
-    docs = retirver.invoke(query.ans)
-    chuks = bm25.invoke(query.ans)
-    for i, doc in enumerate(docs):
-        print("=" * 100)
-        print(f"Page {i+1}")
-        print(doc.page_content[:1000])
+def responce(state: State):
+    llm_struct_1 = llm_3.with_structured_output(responcess)
+    llm_struct_2 = llm_3.with_structured_output(summ)
 
-    chunks = []
+    state_messages = state["messages"].copy()
+    limited_messages = state_messages[-10:]
+    current_summary = state.get("message_summery", "")
 
-    total_chunks = docs + chuks
+    if len(state_messages) > 10:
+        summary_result = llm_struct_2.invoke(SUMMARIZE_PROMPT.format(
+            previous_summary=current_summary,
+            full_conversation=state_messages
+        ))
+        current_summary = summary_result.summary
 
-    unique_docs = []
-    seen = set()
+    result = llm_struct_1.invoke(GENERATION_PROMPT.format(
+        summary=current_summary,
+        chat_history=limited_messages,
+        query=state["current_query"],
+        rewritten_query=state["rewritten_query"],
+        retrieved_chunks=state.get("retrived_chunks", []),
+        visual_chunks=state.get("visual_chunk", [])
+    ))
 
-    for doc in total_chunks:
-        if doc.page_content not in seen:
-            seen.add(doc.page_content)
-            unique_docs.append(doc)
-
-
-    passages = [
-    {
-        "id": i,
-        "text": doc.page_content
-    }
-        for i, doc in enumerate(unique_docs)
-    ]
-
-    request = RerankRequest(
-        query=query.ans,
-        passages=passages
-    )
-
-    results = ranker.rerank(request)
-
-    chunks = []
-
-    for item in results:
-        chunks.append(
-            unique_docs[item["id"]].page_content
-        )
     return {
-        "chunks":chunks 
+        "answer": result.answer,
+        "message_summery": current_summary,
+        "messages": [AIMessage(content=result.answer)]
     }
 
-def final_responce(state:State):
-    full_text = '\n'.join(state['chunks'])
-    print(full_text)
-    responce = llm_2.invoke([
-        SystemMessage(content="""You are an experienced medical assistant that helps users understand their medical reports. Your role is to explain medical information in a clear, accurate, and easy-to-understand manner. You are not a substitute for a licensed physician and should not provide a definitive diagnosis.
+# Condition
+def type_condition(state: State):
+    typ = state["query_type"]
+    if typ == "emergency_flag":
+        return "emergency"
+    elif typ == "out_of_scope":
+        return "scope_out"
+    else:
+        return "continue"
 
-You will receive:
-1. The user's current question.
-2. Extracted text from the uploaded medical report (Medical_text).
-3. Previous chat history.
-
-Instructions:
-
-1. Always understand the user's current question before generating a response.
-
-2. Use the Medical_text as the primary source of information whenever it contains relevant details.
-
-3. Use the chat history only to maintain context and continuity. Give more importance to recent messages than older ones.
-
-4. If the user's question is general (for example, "What is diabetes?" or "What is HbA1c?"), answer using your medical knowledge while relating it to the uploaded report whenever possible.
-
-5. If the Medical_text does not contain the information needed to answer the question, say so clearly instead of making up information.
-
-6. Never fabricate laboratory values, diagnoses, medications, or report findings.
-
-7. Explain medical terms in simple language so that a non-medical user can understand them.
-
-8. If the report contains abnormal values, explain:
-   - what the value means,
-   - whether it is low, normal, or high,
-   - possible medical significance,
-   - common next steps (without making a diagnosis).
-
-9. If the user asks a follow-up question, answer using both the previous conversation and the uploaded report.
-
-10. Keep answers concise but complete. Use bullet points when they improve readability.
-
-11. If the question is unrelated to the uploaded report, answer it normally using your medical knowledge.
-
-Always prioritize:
-User Question > Medical Report > Recent Chat History > Older Chat History.
-                      """),
-        HumanMessage(content=f'Query:{state["messages"][-1].content} \n Medical_text:{full_text} \n chat history:{state["messages"][:-1]}'),
-    ])
-    return {
-        "messages":[responce]
-    }
-
+def is_safe(state:State):
+    if state["safe"]:
+        return "safe"
+    else:
+        return "not_safe"
 
 graph = StateGraph(State)
+graph.add_node("is_query_okk", is_query_okk)
+graph.add_node("classify_query", classify_query)
+graph.add_node("emergency_flag", emergency_flag)
+graph.add_node("out_of_scope", out_of_scope)
+graph.add_node("query_rewrite", query_rewrite)
+graph.add_node("reranking_chunks", reranking_chunks)
+graph.add_node("visual_chunks", visual_chunks)
+graph.add_node("responce", responce)
 
-graph.add_node("retrived", retrived)
-graph.add_node("final_responce", final_responce)
 
-graph.add_edge(START , "retrived")
-graph.add_edge("retrived" , "final_responce")
-graph.add_edge("final_responce" , END)
+graph.add_edge(START, "is_query_okk")
+graph.add_conditional_edges("is_query_okk", is_safe, {
+    "safe": "classify_query",
+    "not_safe": END
+})
+graph.add_conditional_edges("classify_query", type_condition, {
+    "emergency": "emergency_flag",
+    "scope_out": "out_of_scope",
+    "continue": "query_rewrite"
+})
+graph.add_edge("query_rewrite", "reranking_chunks")
+graph.add_edge("reranking_chunks", "visual_chunks")
+graph.add_edge("visual_chunks", "responce")
+graph.add_edge("responce", END)
+graph.add_edge("emergency_flag", END)
+graph.add_edge("out_of_scope", END)
 
-graphh = graph.compile(checkpointer=checkpointer)
-
+graphh = graph.compile(checkpointer=checkpointer, store=store)

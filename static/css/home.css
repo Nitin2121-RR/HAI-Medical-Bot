@@ -313,3 +313,21 @@ body{
         font-size:24px;
     }
 }
+
+@media (max-width:768px){
+
+    .container{
+        flex-direction:column;
+        height:100vh;
+    }
+
+    .sidebar{
+        width:100%;
+        height:auto;
+    }
+
+    .chat-section{
+        flex:1;
+    }
+
+}

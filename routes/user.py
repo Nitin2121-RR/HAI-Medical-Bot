@@ -18,7 +18,7 @@ def login_page(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="home.html"
-    ) 
+    )
 
 @router.post("/login")
 def login(user: login_user , db: Session = Depends(get_db)):

@@ -10,7 +10,7 @@ import models
 
 load_dotenv('.env')
 
-oauth = OAuth2PasswordBearer('/user/login')
+oauth = OAuth2PasswordBearer('/user/login') 
 
 def create_token(data : dict):
     to_encode = data.copy()

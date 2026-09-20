@@ -4,357 +4,290 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HIA - Health Insights Agent</title>
-
 <link rel="stylesheet" href="/static/css/chat.css">
-
-<link rel="stylesheet"
-href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-<link rel="stylesheet"
-href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 </head>
 <body>
 
 <div class="container">
 
-    <!-- Sidebar -->
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
 
-    <div class="sidebar">
-
-        <div>
-            <h2>🩺 HIA</h2>
-
-            <p class="user-name" id="username">
-                Loading...
-            </p>
-        </div>
-
-        <div class="upload-section">
-
-            <h3>Medical Report</h3>
-
-            <input
-                type="file"
-                id="pdfFile"
-                accept=".pdf">
-
-            <button id="uploadBtn">
-                Upload PDF
-            </button>
-
-        </div>
-
+    <div class="sidebar-top">
+      <h2>🩺 HIA</h2>
+      <p class="user-name" id="username">Loading...</p>
     </div>
 
-    <!-- Chat -->
+    <!-- New Session button -->
+    <button class="new-session-btn" id="newSessionBtn">
+      <i class="fa fa-plus"></i> New Session
+    </button>
 
-    <div class="chat-section">
-
-        <div id="chat-box" class="chat-box">
-
-            <div class="bot-message">
-                Welcome to Health Insights Agent 👋
-                Upload your report and ask questions.
-            </div>
-
-        </div>
-
-        <div class="input-area">
-
-            <input
-                type="text"
-                id="messageInput"
-                placeholder="Ask about your report...">
-
-            <button id="sendBtn">
-                Send
-            </button>
-
-        </div>
-
+    <!-- Sessions list -->
+    <div class="sessions-list" id="sessionsList">
+      <!-- populated by JS -->
     </div>
 
+    <!-- PDF upload (shown per-session) -->
+    <div class="upload-section" id="uploadSection">
+      <h3>Medical Report</h3>
+      <input type="file" id="pdfFile" accept=".pdf">
+      <button id="uploadBtn">Upload PDF</button>
+    </div>
+
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-section">
+
+    <div class="chat-header">
+      <button class="toggle-btn" id="toggleBtn">
+        <i class="fa fa-bars"></i>
+      </button>
+      <span id="sessionTitle">Select or create a session</span>
+    </div>
+
+    <div id="chat-box" class="chat-box">
+      <div class="bot-message">
+        Welcome to Health Insights Agent 👋<br>
+        Create a new session or pick an existing one to start.
+      </div>
+    </div>
+
+    <div class="input-area">
+      <input type="text" id="messageInput" placeholder="Ask about your report..." disabled>
+      <button id="sendBtn" disabled>Send</button>
+    </div>
+
+  </div>
 </div>
 
 <script>
-let uuid = localStorage.getItem("current_uuid");
+const token = localStorage.getItem("access_token");
+if (!token) window.location.href = "/user/login";
 
-const token =
-localStorage.getItem("access_token");
+const chatBox       = document.getElementById("chat-box");
+const messageInput  = document.getElementById("messageInput");
+const sendBtn       = document.getElementById("sendBtn");
+const sessionsList  = document.getElementById("sessionsList");
+const sessionTitle  = document.getElementById("sessionTitle");
+const sidebar       = document.getElementById("sidebar");
 
-const chatBox =
-document.getElementById("chat-box");
+let activeSessionId = null;
+let activeUuid      = null;   // pdf uuid for the active session
 
-function addUserMessage(text){
+// ── helpers ─────────────────────────────────────────────────────────────────
 
-    const div = document.createElement("div");
-
-    div.className = "user-message";
-
-    div.textContent = text;
-
-    chatBox.appendChild(div);
-
-    chatBox.scrollTop =
-    chatBox.scrollHeight;
+function authHeaders(json = false) {
+  const h = { Authorization: `Bearer ${token}` };
+  if (json) h["Content-Type"] = "application/json";
+  return h;
 }
 
-function addBotMessage(text){
-
-    const div = document.createElement("div");
-
-    div.className = "bot-message";
-
-    div.innerHTML = marked.parse(text);
-
-    chatBox.appendChild(div);
-
-    hljs.highlightAll();
-
-    chatBox.scrollTop =
-    chatBox.scrollHeight;
+function addUserMessage(text) {
+  const d = document.createElement("div");
+  d.className = "user-message";
+  d.textContent = text;
+  chatBox.appendChild(d);
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-// Check Login
-
-if(!token){
-
-    window.location.href = "/user/login";
+function addBotMessage(text) {
+  const d = document.createElement("div");
+  d.className = "bot-message";
+  d.innerHTML = marked.parse(text);
+  chatBox.appendChild(d);
+  hljs.highlightAll();
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-
-
-// Load Current User
-
-async function getCurrentUser(){
-
-    try{
-
-        const response =
-        await fetch("/current_user/",{
-            headers:{
-                Authorization:
-                `Bearer ${token}`
-            }
-
-        });
-
-        if(!response.ok){
-
-            localStorage.removeItem(
-                "access_token"
-            );
-
-            window.location.href = "/";
-            return;
-        }
-
-        const data =
-        await response.json();
-
-        document
-        .getElementById("username")
-        .innerText = data.name;
-
-    }
-
-    catch(error){
-
-        console.log(error);
-
-    }
-
+function clearChat() {
+  chatBox.innerHTML = "";
 }
 
-
-
-// Load Previous Chats
-
-
-async function loadMessages(){
-
-    try{
-
-        const response =
-        await fetch("/current_user/messages",{
-
-            headers:{
-                Authorization:
-                `Bearer ${token}`
-            }
-
-        });
-
-        const messages =
-        await response.json();
-
-        messages.forEach(msg => {
-
-            if(msg.role === "user"){
-
-                addUserMessage(msg.content);
-            }
-            else{
-
-                addBotMessage(msg.content);
-            }
-
-        });
-
-        chatBox.scrollTop =
-        chatBox.scrollHeight;
-
-    }
-
-    catch(error){
-
-        console.log(error);
-
-    }
-
+function enableInput(on) {
+  messageInput.disabled = !on;
+  sendBtn.disabled = !on;
 }
 
+// ── user ────────────────────────────────────────────────────────────────────
 
+async function loadCurrentUser() {
+  try {
+    const r = await fetch("/current_user/", { headers: authHeaders() });
+    if (!r.ok) { localStorage.removeItem("access_token"); window.location.href = "/"; return; }
+    const data = await r.json();
+    document.getElementById("username").innerText = data.name;
+  } catch (e) { console.error(e); }
+}
 
-// Upload PDF
+// ── sessions ────────────────────────────────────────────────────────────────
 
-document
-.getElementById("uploadBtn")
-.addEventListener("click",
-async () => {
+async function loadSessions() {
+  try {
+    const r = await fetch("/current_user/sessions", { headers: authHeaders() });
+    const sessions = await r.json();
+    renderSessions(sessions);
+  } catch (e) { console.error(e); }
+}
 
-    const file =
-    document
-    .getElementById("pdfFile")
-    .files[0];
+function renderSessions(sessions) {
+  sessionsList.innerHTML = "";
+  sessions.forEach(s => {
+    const item = document.createElement("div");
+    item.className = "session-item" + (s.session_id === activeSessionId ? " active" : "");
+    item.dataset.id = s.session_id;
 
-    if(!file){
+    const label = document.createElement("span");
+    label.className = "session-label";
+    label.textContent = s.name;
+    label.addEventListener("click", () => selectSession(s.session_id, s.name));
 
-        alert("Choose a PDF first");
-        return;
+    const del = document.createElement("button");
+    del.className = "session-delete";
+    del.title = "Delete session";
+    del.innerHTML = '<i class="fa fa-trash"></i>';
+    del.addEventListener("click", (e) => { e.stopPropagation(); deleteSession(s.session_id); });
+
+    item.appendChild(label);
+    item.appendChild(del);
+    sessionsList.appendChild(item);
+  });
+}
+
+async function createSession() {
+  try {
+    const r = await fetch("/current_user/sessions", {
+      method: "POST",
+      headers: authHeaders(true),
+      body: JSON.stringify({ name: "New Chat" })
+    });
+    const s = await r.json();
+    await selectSession(s.session_id, s.name);
+    await loadSessions();
+  } catch (e) { console.error(e); }
+}
+
+async function deleteSession(sessionId) {
+  if (!confirm("Delete this session and all its messages?")) return;
+  try {
+    await fetch(`/current_user/sessions/${sessionId}`, {
+      method: "DELETE",
+      headers: authHeaders()
+    });
+    if (activeSessionId === sessionId) {
+      activeSessionId = null;
+      activeUuid = null;
+      clearChat();
+      chatBox.innerHTML = '<div class="bot-message">Session deleted. Create or select a session to continue.</div>';
+      sessionTitle.textContent = "Select or create a session";
+      enableInput(false);
     }
+    await loadSessions();
+  } catch (e) { console.error(e); }
+}
 
-    const formData =
-    new FormData();
+async function selectSession(sessionId, name) {
+  activeSessionId = sessionId;
+  // Reset pdf uuid — user must re-upload or it carries over via localStorage per session
+  activeUuid = localStorage.getItem(`uuid_${sessionId}`) || null;
 
-    formData.append(
-        "file",
-        file
-    );
+  // Update UI
+  sessionTitle.textContent = name;
+  enableInput(true);
+  clearChat();
 
-    try{
+  // Mark active in list
+  document.querySelectorAll(".session-item").forEach(el => {
+    el.classList.toggle("active", el.dataset.id === sessionId);
+  });
 
-        const response =
-        await fetch(
-            "/current_user/upload-pdf",
-            {
-                method:"POST",
-                headers:{
-                    Authorization:
-                    `Bearer ${token}`
-                },
-
-                body:formData
-            }
-        );
-
-        const data =
-        await response.json();
-        uuid = data.uuid;    
-        localStorage.setItem("current_uuid", uuid);
-        addUserMessage(`📄 ${file.name}`);
-
-        addBotMessage(data.message);
-
-        chatBox.scrollTop =
-        chatBox.scrollHeight;
-
+  // Load messages for this session
+  try {
+    const r = await fetch(`/current_user/sessions/${sessionId}/messages`, { headers: authHeaders() });
+    const msgs = await r.json();
+    if (msgs.length === 0) {
+      addBotMessage("Welcome 👋 Upload your medical report and start asking questions.");
+    } else {
+      msgs.forEach(m => m.role === "user" ? addUserMessage(m.content) : addBotMessage(m.content));
     }
+  } catch (e) { console.error(e); }
+}
 
-    catch(error){
+// ── PDF upload ───────────────────────────────────────────────────────────────
 
-        console.log(error);
+document.getElementById("uploadBtn").addEventListener("click", async () => {
+  if (!activeSessionId) { alert("Select or create a session first."); return; }
+  const file = document.getElementById("pdfFile").files[0];
+  if (!file) { alert("Choose a PDF first."); return; }
 
-    }
+  const formData = new FormData();
+  formData.append("file", file);
 
+  try {
+    const r = await fetch("/current_user/upload-pdf", {
+      method: "POST",
+      headers: authHeaders(),
+      body: formData
+    });
+    const data = await r.json();
+    activeUuid = data.uuid;
+    localStorage.setItem(`uuid_${activeSessionId}`, activeUuid);
+    addUserMessage(`📄 ${file.name}`);
+    addBotMessage(data.message);
+  } catch (e) { console.error(e); }
 });
 
+// ── send message ────────────────────────────────────────────────────────────
 
+async function sendMessage() {
+  const text = messageInput.value.trim();
+  if (!text || !activeSessionId) return;
 
-// Send Chat
+  addUserMessage(text);
+  messageInput.value = "";
+  enableInput(false);
 
-document
-.getElementById("sendBtn")
-.addEventListener("click",
-async () => {
+  try {
+    const r = await fetch("/current_user/chat", {
+      method: "POST",
+      headers: authHeaders(true),
+      body: JSON.stringify({
+        question: text,
+        uuid_name: activeUuid || "",
+        session_id: activeSessionId
+      })
+    });
+    const data = await r.json();
+    addBotMessage(data.answer);
+  } catch (e) {
+    addBotMessage("Something went wrong. Please try again.");
+    console.error(e);
+  } finally {
+    enableInput(true);
+    messageInput.focus();
+  }
+}
 
-    const input =
-    document.getElementById(
-        "messageInput"
-    );
+sendBtn.addEventListener("click", sendMessage);
+messageInput.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
 
-    const message =
-    input.value;
+document.getElementById("newSessionBtn").addEventListener("click", createSession);
 
-    if(message.trim()===""){
-        return;
-    }
+// ── sidebar toggle ────────────────────────────────────────────────────────────
 
-    addUserMessage(message);
-
-    input.value = "";
-
-    chatBox.scrollTop =
-    chatBox.scrollHeight;
-
-    try{
-
-        const response =
-        await fetch(
-            "/current_user/chat",
-            {
-                method:"POST",
-
-                headers:{
-                    "Content-Type":
-                    "application/json",
-
-                    Authorization:
-                    `Bearer ${token}`
-                },
-
-                body:JSON.stringify({
-                    question:message,
-                    uuid_name:uuid
-                })
-            }
-        );
-
-        const data =
-        await response.json();
-
-        addBotMessage(data.answer);
-
-        chatBox.scrollTop =
-        chatBox.scrollHeight;
-
-    }
-
-    catch(error){
-
-        console.log(error);
-
-    }
-
+document.getElementById("toggleBtn").addEventListener("click", () => {
+  sidebar.classList.toggle("hide");
 });
 
+// ── init ─────────────────────────────────────────────────────────────────────
 
-getCurrentUser();
-loadMessages();
-
+loadCurrentUser();
+loadSessions();
 </script>
 
 </body>
