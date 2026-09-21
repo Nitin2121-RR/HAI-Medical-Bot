@@ -23,14 +23,9 @@ from prompts import CLASSIFY_PROMPT , QUERY_REWRITE_PROMPT , GENERATION_PROMPT ,
 from report_receiver import analyze_visual , extract_images_from_page
 import fitz
 from psycopg_pool import ConnectionPool
-from langchain_core.globals import set_llm_cache
-from langchain_redis import RedisCache
+
 
 load_dotenv('.env')
-
-redish_url = os.getenv('REDISH_URL')
-residh_cache = RedisCache(redis_url=redish_url)
-set_llm_cache(residh_cache)
 
 llm_2 = ChatGenAI(model="gemini-3.5-flash-lite", google_api_key=os.getenv('GEMINI_API_KEY_2'))
 llm_3 = ChatGenAI(model="gemini-3.5-flash-lite", google_api_key=os.getenv('GEMINI_API_KEY_3'))
