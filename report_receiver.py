@@ -73,7 +73,7 @@ def split_doc(documents):
 def analyze_visual(image_bytes: bytes) -> str:
     """Send image bytes to Gemini vision and return a text description."""
     vision_model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash-lite",
         google_api_key=os.getenv("GEMINI_API_KEY_1")
     )
     # Encode to base64 for the Gemini API
@@ -103,7 +103,14 @@ def analyze_visual(image_bytes: bytes) -> str:
     ])
 
     result = vision_model.invoke([msg])
-    return result.content
+    # result.content may be a list of blocks in newer langchain-google-genai versions
+    content = result.content
+    if isinstance(content, list):
+        content = " ".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+        )
+    return content
 
 
 def extract_images_from_page(pdf, page_number):

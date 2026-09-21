@@ -9,7 +9,7 @@ body{
     min-height:100vh;
     display:flex;
     justify-content:center;
-    align-items:center;
+    align-items:flex-start;
 
     background:
     linear-gradient(
@@ -20,6 +20,8 @@ body{
 
     background-size:cover;
     background-position:center;
+    background-attachment:fixed;
+    padding: 40px 16px;
 }
 
 .container{
@@ -316,18 +318,29 @@ body{
 
 @media (max-width:768px){
 
+    body {
+        align-items: flex-start;
+        padding: 20px 12px 40px;
+    }
+
     .container{
-        flex-direction:column;
-        height:100vh;
+        grid-template-columns: 1fr;
+        height: auto;
+        width: 100%;
+        max-width: 100%;
+        overflow: visible;
     }
 
-    .sidebar{
-        width:100%;
-        height:auto;
+    .left-section{
+        padding: 30px 20px;
     }
 
-    .chat-section{
-        flex:1;
+    .right-section{
+        padding: 30px 20px;
+        align-items: flex-start;
     }
 
+    .login-card {
+        max-width: 100%;
+    }
 }
